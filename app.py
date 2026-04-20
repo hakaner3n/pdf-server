@@ -8,8 +8,41 @@ from reportlab.lib.enums import TA_LEFT, TA_CENTER
 import io
 import datetime
 import base64
+import urllib.request
+import json
 
 app = Flask(__name__)
+
+MAKE_WEBHOOK_URL = "https://hook.eu1.make.com/zvrwplg9s3e8hk4b85xxvtbm3ml2g4c2"
+
+@app.after_request
+def after_request(response):
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    return response
+
+@app.route("/submit", methods=["POST", "OPTIONS"])
+def submit():
+    if request.method == "OPTIONS":
+        return jsonify({}), 200
+    try:
+        data = request.get_json(force=True)
+        if not data:
+            return jsonify({"error": "Keine Daten"}), 400
+        payload = json.dumps(data).encode("utf-8")
+        req = urllib.request.Request(
+            MAKE_WEBHOOK_URL,
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+        urllib.request.urlopen(req, timeout=10)
+        return jsonify({"status": "ok"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 
 TEAL      = colors.HexColor("#1a5f6a")
 TEAL_DARK = colors.HexColor("#144d57")
