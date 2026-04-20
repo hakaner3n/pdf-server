@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.lib.units import cm
@@ -7,22 +7,17 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT
 import io
 import datetime
-import base64
 import urllib.request
 import json
 import os
-import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from email.mime.base import MIMEBase
-from email import encoders
+import uuid
 
 app = Flask(__name__)
 
 MAKE_WEBHOOK_URL = "https://hook.eu1.make.com/zvrwplg9s3e8hk4b85xxvtbm3ml2g4c2"
-SMTP_SERVER   = os.environ.get("SMTP_SERVER",   "secure.emailsrvr.com")
-SMTP_USER     = os.environ.get("SMTP_USER",     "")
-SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
+
+# Temporärer Speicher für PDFs (im RAM)
+pdf_store = {}
 
 @app.after_request
 def after_request(response):
@@ -31,14 +26,12 @@ def after_request(response):
     response.headers["Access-Control-Allow-Headers"] = "Content-Type"
     return response
 
-# ── Styles ────────────────────────────────────────────────────
 DARK  = colors.HexColor("#1a1a1a")
 MUTED = colors.HexColor("#666666")
 
 def s(name, **kw):
     return ParagraphStyle(name, **kw)
 
-# ── Anmeldebestätigung PDF ────────────────────────────────────
 def make_anmeldung(data):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4,
@@ -49,7 +42,6 @@ def make_anmeldung(data):
     story = []
     heute = datetime.date.today().strftime("%d.%m.%y")
 
-    # Logo
     logo_path = os.path.join(os.path.dirname(__file__), "logo.png")
     if os.path.exists(logo_path):
         logo = Image(logo_path, width=2*cm, height=2*cm)
@@ -196,40 +188,6 @@ def load_pdf_from_github(url):
         return None
 
 
-def send_email(to_email, vorname, nachname, anmeldung_pdf, agb_pdf, widerruf_pdf):
-    msg = MIMEMultipart()
-    msg["From"]    = f"Musikschule Hückelhoven <{SMTP_USER}>"
-    msg["To"]      = to_email
-    msg["Subject"] = f"Anmeldebestätigung Saz Kurs – {vorname} {nachname}"
-
-    body = f"""<p>Hallo {vorname},</p>
-<p>vielen Dank für deine Anmeldung über unsere Webseite. Anbei findest du die Anmeldebestätigung sowie unsere AGB und die Widerrufsbelehrung.</p>
-<p><strong>Wichtig:</strong><br>
-Bitte bestätige kurz den Erhalt dieser E-Mail, um sicherzustellen, dass sie nicht im Spam-Ordner gelandet ist. Eine kurze Antwort mit "erhalten" genügt.</p>
-<p>Bei Fragen stehen wir dir gerne zur Verfügung.</p>
-<p>Mit freundlichen Grüßen,<br>Team - Musikschule Hückelhoven</p>"""
-
-    msg.attach(MIMEText(body, "html", "utf-8"))
-
-    def attach_pdf(data, filename):
-        if data:
-            part = MIMEBase("application", "pdf")
-            part.set_payload(data)
-            encoders.encode_base64(part)
-            safe_filename = filename.encode("ascii", "ignore").decode()
-            part.add_header("Content-Disposition", f'attachment; filename="{safe_filename}"')
-            msg.attach(part)
-
-    attach_pdf(anmeldung_pdf, f"Anmeldebestaetigung_{vorname}_{nachname}.pdf".encode("ascii", "ignore").decode())
-    attach_pdf(agb_pdf,       "AGB_Musikschule_Hueckelhoven.pdf")
-    attach_pdf(widerruf_pdf,  "Widerrufsbelehrung.pdf")
-
-    with smtplib.SMTP(SMTP_SERVER, 8025) as server:
-        server.starttls()
-        server.login(SMTP_USER, SMTP_PASSWORD)
-        server.send_message(msg)
-
-
 @app.route("/submit", methods=["POST", "OPTIONS"])
 def submit():
     if request.method == "OPTIONS":
@@ -246,33 +204,70 @@ def submit():
         widerruf_pdf  = load_pdf_from_github(
             "https://raw.githubusercontent.com/hakaner3n/Anmeldung/main/Widerrufsbelehrung.pdf")
 
-        # E-Mail versenden
-        send_email(
-            to_email     = data.get("email", ""),
-            vorname      = data.get("vorname", ""),
-            nachname     = data.get("nachname", ""),
-            anmeldung_pdf= anmeldung_pdf,
-            agb_pdf      = agb_pdf,
-            widerruf_pdf = widerruf_pdf
-        )
+        # PDFs im RAM speichern mit eindeutiger ID
+        pdf_id = str(uuid.uuid4())
+        vorname  = data.get("vorname", "").replace(" ", "_")
+        nachname = data.get("nachname", "").replace(" ", "_")
 
-        # Make.com benachrichtigen
-        try:
-            payload = json.dumps(data).encode("utf-8")
-            req = urllib.request.Request(
-                MAKE_WEBHOOK_URL,
-                data=payload,
-                headers={"Content-Type": "application/json"},
-                method="POST"
-            )
-            urllib.request.urlopen(req, timeout=10)
-        except:
-            pass
+        pdf_store[pdf_id] = {
+            "anmeldung": anmeldung_pdf,
+            "agb":       agb_pdf,
+            "widerruf":  widerruf_pdf,
+            "vorname":   vorname,
+            "nachname":  nachname,
+        }
+
+        # Basis-URL des Servers
+        base_url = request.host_url.rstrip("/")
+
+        # Make.com benachrichtigen mit PDF-URLs
+        webhook_data = dict(data)
+        webhook_data["pdf_anmeldung"] = f"{base_url}/pdf/{pdf_id}/anmeldung"
+        webhook_data["pdf_agb"]       = f"{base_url}/pdf/{pdf_id}/agb"
+        webhook_data["pdf_widerruf"]  = f"{base_url}/pdf/{pdf_id}/widerruf"
+        webhook_data["pdf_anmeldung_name"] = f"Anmeldebestaetigung_{vorname}_{nachname}.pdf"
+
+        payload = json.dumps(webhook_data).encode("utf-8")
+        req = urllib.request.Request(
+            MAKE_WEBHOOK_URL,
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+        urllib.request.urlopen(req, timeout=10)
 
         return jsonify({"status": "ok"}), 200
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/pdf/<pdf_id>/<doc_type>", methods=["GET"])
+def get_pdf(pdf_id, doc_type):
+    if pdf_id not in pdf_store:
+        return jsonify({"error": "PDF nicht gefunden"}), 404
+
+    entry = pdf_store[pdf_id]
+    pdf_data = entry.get(doc_type)
+    if not pdf_data:
+        return jsonify({"error": "Dokument nicht gefunden"}), 404
+
+    vorname  = entry.get("vorname", "")
+    nachname = entry.get("nachname", "")
+
+    if doc_type == "anmeldung":
+        filename = f"Anmeldebestaetigung_{vorname}_{nachname}.pdf"
+    elif doc_type == "agb":
+        filename = "AGB_Musikschule_Hueckelhoven.pdf"
+    else:
+        filename = "Widerrufsbelehrung.pdf"
+
+    return send_file(
+        io.BytesIO(pdf_data),
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name=filename
+    )
 
 
 @app.route("/health", methods=["GET"])
