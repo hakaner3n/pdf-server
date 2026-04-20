@@ -11,59 +11,45 @@ import base64
 import urllib.request
 import json
 import os
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.base import MIMEBase
+from email import encoders
 
 app = Flask(__name__)
 
 MAKE_WEBHOOK_URL = "https://hook.eu1.make.com/zvrwplg9s3e8hk4b85xxvtbm3ml2g4c2"
+SMTP_SERVER   = os.environ.get("SMTP_SERVER",   "secure.emailsrvr.com")
+SMTP_USER     = os.environ.get("SMTP_USER",     "")
+SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
 
 @app.after_request
 def after_request(response):
-    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Origin"]  = "*"
     response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
     response.headers["Access-Control-Allow-Headers"] = "Content-Type"
     return response
 
-@app.route("/submit", methods=["POST", "OPTIONS"])
-def submit():
-    if request.method == "OPTIONS":
-        return jsonify({}), 200
-    try:
-        data = request.get_json(force=True)
-        if not data:
-            return jsonify({"error": "Keine Daten"}), 400
-        payload = json.dumps(data).encode("utf-8")
-        req = urllib.request.Request(
-            MAKE_WEBHOOK_URL,
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST"
-        )
-        urllib.request.urlopen(req, timeout=10)
-        return jsonify({"status": "ok"}), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
+# ── Styles ────────────────────────────────────────────────────
+DARK  = colors.HexColor("#1a1a1a")
+MUTED = colors.HexColor("#666666")
 
 def s(name, **kw):
     return ParagraphStyle(name, **kw)
 
-DARK  = colors.HexColor("#1a1a1a")
-MUTED = colors.HexColor("#666666")
-TEAL  = colors.HexColor("#1a5f6a")
-
+# ── Anmeldebestätigung PDF ────────────────────────────────────
 def make_anmeldung(data):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4,
         leftMargin=2*cm, rightMargin=2*cm,
-        topMargin=1.5*cm, bottomMargin=2.5*cm)
+        topMargin=1.5*cm, bottomMargin=3*cm)
 
     W = A4[0] - 4*cm
     story = []
-
-    # ── Datum ─────────────────────────────────────────────────
     heute = datetime.date.today().strftime("%d.%m.%y")
 
-    # ── Logo + Firmenname ──────────────────────────────────────
+    # Logo
     logo_path = os.path.join(os.path.dirname(__file__), "logo.png")
     if os.path.exists(logo_path):
         logo = Image(logo_path, width=2*cm, height=2*cm)
@@ -84,7 +70,7 @@ def make_anmeldung(data):
 
     header_table = Table([[logo, firma_text]], colWidths=[2.5*cm, W - 2.5*cm])
     header_table.setStyle(TableStyle([
-        ("VALIGN",        (0,0), (-1,-1), "TOP"),
+        ("VALIGN", (0,0), (-1,-1), "TOP"),
         ("LEFTPADDING",   (0,0), (-1,-1), 0),
         ("RIGHTPADDING",  (0,0), (-1,-1), 0),
         ("TOPPADDING",    (0,0), (-1,-1), 0),
@@ -95,13 +81,11 @@ def make_anmeldung(data):
     story.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#cccccc")))
     story.append(Spacer(1, 6))
 
-    # ── Absenderzeile ──────────────────────────────────────────
     story.append(Paragraph(
         "Musikschule Hückelhoven e.V. * Kuhlert Straße 98 * 52525 Heinsberg",
         s("abs", fontSize=7.5, fontName="Helvetica", textColor=MUTED, leading=11)))
     story.append(Spacer(1, 6))
 
-    # ── Adresse + Datum nebeneinander ─────────────────────────
     vorname  = data.get("vorname", "")
     nachname = data.get("nachname", "")
     strasse  = data.get("strasse", "")
@@ -127,7 +111,7 @@ def make_anmeldung(data):
 
     addr_table = Table([[adresse, datum_block]], colWidths=[11*cm, 5*cm])
     addr_table.setStyle(TableStyle([
-        ("VALIGN",        (0,0), (-1,-1), "TOP"),
+        ("VALIGN", (0,0), (-1,-1), "TOP"),
         ("LEFTPADDING",   (0,0), (-1,-1), 0),
         ("RIGHTPADDING",  (0,0), (-1,-1), 0),
         ("TOPPADDING",    (0,0), (-1,-1), 0),
@@ -136,34 +120,25 @@ def make_anmeldung(data):
     story.append(addr_table)
     story.append(Spacer(1, 20))
 
-    # ── Betreff ───────────────────────────────────────────────
-    story.append(Paragraph(
-        "<b>Betreff: Anmeldebestätigung Saz-Unterricht</b>",
+    story.append(Paragraph("<b>Betreff: Anmeldebestätigung Saz-Unterricht</b>",
         s("betreff", fontSize=10, fontName="Helvetica-Bold", textColor=DARK, leading=15)))
     story.append(Spacer(1, 16))
 
-    # ── Anrede ────────────────────────────────────────────────
-    story.append(Paragraph(
-        f"Hallo {vorname},",
+    story.append(Paragraph(f"Hallo {vorname},",
         s("anrede", fontSize=10, fontName="Helvetica", textColor=DARK, leading=15)))
     story.append(Spacer(1, 12))
 
-    # ── Einleitungstext ───────────────────────────────────────
     story.append(Paragraph(
         "die Anmeldung wurde bestätigt. Anbei erhältst Du die AGB unserer Musikschule und die Widerrufsbelehrung.",
         s("intro", fontSize=10, fontName="Helvetica", textColor=DARK, leading=15)))
     story.append(Spacer(1, 20))
 
-    # ── Unterrichtsdetails Tabelle ────────────────────────────
-    kurs = data.get("kurs", "")
-    # Preis aus Kurs extrahieren
-    preis = "68€"
-    if "80" in kurs:
-        preis = "80€"
+    kurs  = data.get("kurs", "")
+    preis = "80€" if "80" in kurs else "68€"
 
     details = [
         ["Unterrichtsteilnehmer:", Paragraph(f"<b>{vorname} {nachname}</b>",
-            s("tv", fontSize=10, fontName="Helvetica-Bold", textColor=DARK, leading=14))],
+            s("tv1", fontSize=10, fontName="Helvetica-Bold", textColor=DARK, leading=14))],
         ["Unterrichtsfach:", Paragraph("<b>Musikunterricht - Baglama</b>",
             s("tv2", fontSize=10, fontName="Helvetica-Bold", textColor=DARK, leading=14))],
         ["Unterrichtsart:", Paragraph("<b>Gruppenunterricht</b>",
@@ -190,17 +165,12 @@ def make_anmeldung(data):
     story.append(detail_table)
     story.append(Spacer(1, 30))
 
-    # ── Grußformel ────────────────────────────────────────────
-    story.append(Paragraph(
-        "Mit freundlichen Grüßen,",
+    story.append(Paragraph("Mit freundlichen Grüßen,",
         s("gruss", fontSize=10, fontName="Helvetica", textColor=DARK, leading=15)))
     story.append(Spacer(1, 20))
-    story.append(Paragraph(
-        "Musikschule Hückelhoven",
+    story.append(Paragraph("Musikschule Hückelhoven",
         s("ms", fontSize=10, fontName="Helvetica", textColor=DARK, leading=15)))
-    story.append(Spacer(1, 1))
 
-    # ── Footer ────────────────────────────────────────────────
     def footer(canvas, doc):
         canvas.saveState()
         canvas.setStrokeColor(colors.HexColor("#cccccc"))
@@ -215,68 +185,89 @@ def make_anmeldung(data):
 
     doc.build(story, onFirstPage=footer, onLaterPages=footer)
     buffer.seek(0)
-    return buffer
+    return buffer.read()
 
 
-def make_agb():
-    """Lädt die echte AGB von GitHub"""
-    url = "https://raw.githubusercontent.com/hakaner3n/Anmeldung/main/AGB_Musikschule_Hueckelhoven.pdf"
+def load_pdf_from_github(url):
     try:
         with urllib.request.urlopen(url, timeout=10) as resp:
-            return io.BytesIO(resp.read())
+            return resp.read()
     except:
-        # Fallback: leere PDF
-        buffer = io.BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=A4)
-        doc.build([Paragraph("AGB", ParagraphStyle("x", fontSize=12))])
-        buffer.seek(0)
-        return buffer
+        return None
 
 
-def make_widerruf():
-    """Lädt die echte Widerrufsbelehrung von GitHub"""
-    url = "https://raw.githubusercontent.com/hakaner3n/Anmeldung/main/Widerrufsbelehrung.pdf"
-    try:
-        with urllib.request.urlopen(url, timeout=10) as resp:
-            return io.BytesIO(resp.read())
-    except:
-        buffer = io.BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=A4)
-        doc.build([Paragraph("Widerrufsbelehrung", ParagraphStyle("x", fontSize=12))])
-        buffer.seek(0)
-        return buffer
+def send_email(to_email, vorname, nachname, anmeldung_pdf, agb_pdf, widerruf_pdf):
+    msg = MIMEMultipart()
+    msg["From"]    = f"Musikschule Hückelhoven <{SMTP_USER}>"
+    msg["To"]      = to_email
+    msg["Subject"] = f"Anmeldebestätigung Saz Kurs – {vorname} {nachname}"
+
+    body = f"""<p>Hallo {vorname},</p>
+<p>vielen Dank für deine Anmeldung über unsere Webseite. Anbei findest du die Anmeldebestätigung sowie unsere AGB und die Widerrufsbelehrung.</p>
+<p><strong>Wichtig:</strong><br>
+Bitte bestätige kurz den Erhalt dieser E-Mail, um sicherzustellen, dass sie nicht im Spam-Ordner gelandet ist. Eine kurze Antwort mit "erhalten" genügt.</p>
+<p>Bei Fragen stehen wir dir gerne zur Verfügung.</p>
+<p>Mit freundlichen Grüßen,<br>Team - Musikschule Hückelhoven</p>"""
+
+    msg.attach(MIMEText(body, "html", "utf-8"))
+
+    def attach_pdf(data, filename):
+        if data:
+            part = MIMEBase("application", "pdf")
+            part.set_payload(data)
+            encoders.encode_base64(part)
+            part.add_header("Content-Disposition", f'attachment; filename="{filename}"')
+            msg.attach(part)
+
+    attach_pdf(anmeldung_pdf, f"Anmeldebestaetigung_{vorname}_{nachname}.pdf")
+    attach_pdf(agb_pdf,       "AGB_Musikschule_Hueckelhoven.pdf")
+    attach_pdf(widerruf_pdf,  "Widerrufsbelehrung.pdf")
+
+    with smtplib.SMTP_SSL(SMTP_SERVER, 465) as server:
+        server.login(SMTP_USER, SMTP_PASSWORD)
+        server.send_message(msg)
 
 
-@app.route("/generate-pdf", methods=["POST", "OPTIONS"])
-def generate_pdf():
+@app.route("/submit", methods=["POST", "OPTIONS"])
+def submit():
     if request.method == "OPTIONS":
         return jsonify({}), 200
     try:
         data = request.get_json(force=True)
         if not data:
-            return jsonify({"error": "Keine Daten empfangen"}), 400
+            return jsonify({"error": "Keine Daten"}), 400
 
-        anmeldung_buf = make_anmeldung(data)
-        agb_buf       = make_agb()
-        widerruf_buf  = make_widerruf()
+        # PDFs erstellen
+        anmeldung_pdf = make_anmeldung(data)
+        agb_pdf       = load_pdf_from_github(
+            "https://raw.githubusercontent.com/hakaner3n/Anmeldung/main/AGB_Musikschule_Hueckelhoven.pdf")
+        widerruf_pdf  = load_pdf_from_github(
+            "https://raw.githubusercontent.com/hakaner3n/Anmeldung/main/Widerrufsbelehrung.pdf")
 
-        vorname  = data.get("vorname", "Anmeldung").replace(" ", "_")
-        nachname = data.get("nachname", "").replace(" ", "_")
+        # E-Mail versenden
+        send_email(
+            to_email     = data.get("email", ""),
+            vorname      = data.get("vorname", ""),
+            nachname     = data.get("nachname", ""),
+            anmeldung_pdf= anmeldung_pdf,
+            agb_pdf      = agb_pdf,
+            widerruf_pdf = widerruf_pdf
+        )
 
-        return jsonify({
-            "anmeldung": {
-                "filename": f"Anmeldebestaetigung_{vorname}_{nachname}.pdf",
-                "data": base64.b64encode(anmeldung_buf.read()).decode("utf-8")
-            },
-            "agb": {
-                "filename": "AGB_Musikschule_Hueckelhoven.pdf",
-                "data": base64.b64encode(agb_buf.read()).decode("utf-8")
-            },
-            "widerruf": {
-                "filename": "Widerrufsbelehrung.pdf",
-                "data": base64.b64encode(widerruf_buf.read()).decode("utf-8")
-            }
-        })
+        # Make.com benachrichtigen
+        try:
+            payload = json.dumps(data).encode("utf-8")
+            req = urllib.request.Request(
+                MAKE_WEBHOOK_URL,
+                data=payload,
+                headers={"Content-Type": "application/json"},
+                method="POST"
+            )
+            urllib.request.urlopen(req, timeout=10)
+        except:
+            pass
+
+        return jsonify({"status": "ok"}), 200
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
