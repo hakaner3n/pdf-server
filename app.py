@@ -223,7 +223,7 @@ Bitte bestätige kurz den Erhalt dieser E-Mail, um sicherzustellen, dass sie nic
     attach_pdf(agb_pdf,       "AGB_Musikschule_Hueckelhoven.pdf")
     attach_pdf(widerruf_pdf,  "Widerrufsbelehrung.pdf")
 
-    with smtplib.SMTP(SMTP_SERVER, 587) as server:
+    with smtplib.SMTP(SMTP_SERVER, 8025) as server:
         server.starttls()
         server.login(SMTP_USER, SMTP_PASSWORD)
         server.send_message(msg)
