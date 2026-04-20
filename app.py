@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.lib.units import cm
@@ -7,12 +7,12 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib.enums import TA_LEFT, TA_CENTER
 import io
 import datetime
+import base64
 
 app = Flask(__name__)
 
 TEAL      = colors.HexColor("#1a5f6a")
 TEAL_DARK = colors.HexColor("#144d57")
-LIGHT     = colors.HexColor("#e8f4f6")
 ACCENT    = colors.HexColor("#c0392b")
 BORDER    = colors.HexColor("#ccd8da")
 GRAY      = colors.HexColor("#f7fafb")
@@ -20,46 +20,42 @@ WHITE     = colors.white
 DARK      = colors.HexColor("#2c2c2c")
 MUTED     = colors.HexColor("#666666")
 
-def make_pdf(data):
+def s(name, **kw):
+    return ParagraphStyle(name, **kw)
+
+def make_anmeldung(data):
     buffer = io.BytesIO()
-    doc = SimpleDocTemplate(
-        buffer, pagesize=A4,
+    doc = SimpleDocTemplate(buffer, pagesize=A4,
         leftMargin=2*cm, rightMargin=2*cm,
-        topMargin=1.5*cm, bottomMargin=2.5*cm
-    )
+        topMargin=1.5*cm, bottomMargin=2.5*cm)
 
-    def s(name, **kw):
-        return ParagraphStyle(name, **kw)
-
-    title_style  = s("title",  fontSize=20, leading=26, textColor=WHITE,      fontName="Helvetica-Bold", alignment=TA_LEFT)
-    sub_style    = s("sub",    fontSize=10, leading=14, textColor=colors.HexColor("#c8d8da"), fontName="Helvetica", alignment=TA_LEFT)
-    section_style= s("sec",    fontSize=11, leading=16, textColor=ACCENT,      fontName="Helvetica-Bold", spaceBefore=12, spaceAfter=4)
-    body_style   = s("body",   fontSize=9.5,leading=15, textColor=DARK,        fontName="Helvetica", spaceAfter=4)
-    bold_style   = s("bold",   fontSize=9.5,leading=15, textColor=DARK,        fontName="Helvetica-Bold", spaceAfter=2)
-    label_style  = s("label",  fontSize=8,  leading=11, textColor=MUTED,       fontName="Helvetica-Bold")
-    value_style  = s("value",  fontSize=10, leading=14, textColor=DARK,        fontName="Helvetica-Bold")
-    footer_style = s("footer", fontSize=7.5,leading=11, textColor=MUTED,       fontName="Helvetica", alignment=TA_CENTER)
-    small_style  = s("small",  fontSize=8,  leading=12, textColor=MUTED,       fontName="Helvetica")
+    title_style = s("title", fontSize=20, leading=26, textColor=WHITE, fontName="Helvetica-Bold", alignment=TA_LEFT)
+    body_style  = s("body",  fontSize=9.5, leading=15, textColor=DARK, fontName="Helvetica", spaceAfter=4)
+    bold_style  = s("bold",  fontSize=9.5, leading=15, textColor=DARK, fontName="Helvetica-Bold", spaceAfter=2)
+    label_style = s("label", fontSize=8,   leading=11, textColor=MUTED, fontName="Helvetica-Bold")
+    value_style = s("value", fontSize=10,  leading=14, textColor=DARK,  fontName="Helvetica-Bold")
+    small_style = s("small", fontSize=8,   leading=12, textColor=MUTED, fontName="Helvetica")
 
     story = []
     W = A4[0] - 4*cm
 
-    # ── Header ──────────────────────────────────────────────────
     datum = data.get("zeitstempel", "")[:10] if data.get("zeitstempel") else datetime.date.today().strftime("%Y-%m-%d")
     try:
         datum_fmt = datetime.datetime.strptime(datum, "%Y-%m-%d").strftime("%d.%m.%Y")
     except:
         datum_fmt = datum
 
-    anmelde_nr = f"ANM-{datetime.date.today().strftime('%Y')}-{abs(hash(data.get('email',''))  ) % 9000 + 1000}"
+    anmelde_nr = f"ANM-{datetime.date.today().strftime('%Y')}-{abs(hash(data.get('email',''))) % 9000 + 1000}"
 
     header = Table([[
-        Paragraph("Anmeldebestätigung", title_style),
+        Paragraph("Anmeldebestaetigung", title_style),
         [Paragraph("Nr.", small_style),
-         Paragraph(f"<b><font color='white'>{anmelde_nr}</font></b>", ParagraphStyle("nr", fontSize=11, fontName="Helvetica-Bold", textColor=WHITE, leading=14)),
+         Paragraph(f"<b><font color='white'>{anmelde_nr}</font></b>",
+                   ParagraphStyle("nr", fontSize=11, fontName="Helvetica-Bold", textColor=WHITE, leading=14)),
          Spacer(1,4),
          Paragraph("Datum", small_style),
-         Paragraph(f"<b><font color='white'>{datum_fmt}</font></b>", ParagraphStyle("dt", fontSize=10, fontName="Helvetica-Bold", textColor=WHITE, leading=14))]
+         Paragraph(f"<b><font color='white'>{datum_fmt}</font></b>",
+                   ParagraphStyle("dt", fontSize=10, fontName="Helvetica-Bold", textColor=WHITE, leading=14))]
     ]], colWidths=[11*cm, 5*cm])
     header.setStyle(TableStyle([
         ("BACKGROUND",    (0,0), (-1,-1), TEAL_DARK),
@@ -73,14 +69,12 @@ def make_pdf(data):
     story.append(header)
     story.append(Spacer(1, 14))
 
-    # ── Greeting ─────────────────────────────────────────────────
     vorname  = data.get("vorname", "")
     nachname = data.get("nachname", "")
     story.append(Paragraph(f"Sehr geehrte/r {vorname} {nachname},", bold_style))
     story.append(Spacer(1, 4))
     story.append(Paragraph(
-        "wir freuen uns über Ihre Anmeldung und bestätigen hiermit Ihre Aufnahme in unsere Musikschule. "
-        "Nachfolgend finden Sie eine Übersicht Ihrer Anmeldedaten.",
+        "wir freuen uns ueber Ihre Anmeldung und bestaetigen hiermit Ihre Aufnahme in unsere Musikschule.",
         body_style))
     story.append(Spacer(1, 10))
 
@@ -109,80 +103,146 @@ def make_pdf(data):
         ]))
         return t
 
-    # ── Schüler ───────────────────────────────────────────────────
-    story.append(accent_bar("Angaben zur/zum Schüler/in"))
+    story.append(accent_bar("Angaben zur/zum Schueler/in"))
     story.append(Spacer(1, 4))
     story.append(info_grid([
         ("Vorname",      data.get("vorname", "")),
         ("Nachname",     data.get("nachname", "")),
         ("Geburtsdatum", data.get("geburtsdatum", "")),
-        ("Straße / Nr.", data.get("strasse", "")),
+        ("Strasse / Nr.",data.get("strasse", "")),
         ("PLZ / Ort",    f'{data.get("plz","")}  {data.get("ort","")}'),
         ("Telefon",      data.get("telefon", "")),
         ("E-Mail",       data.get("email", "")),
     ]))
     story.append(Spacer(1, 12))
 
-    # ── Kurs ──────────────────────────────────────────────────────
     story.append(accent_bar("Gebuchter Kurs"))
     story.append(Spacer(1, 4))
-    story.append(info_grid([
-        ("Kurs", data.get("kurs", "")),
-    ]))
+    story.append(info_grid([("Kurs", data.get("kurs", ""))]))
     story.append(Spacer(1, 12))
 
-    # ── Bankdaten ─────────────────────────────────────────────────
     story.append(accent_bar("Bankdaten / SEPA-Lastschriftmandat"))
     story.append(Spacer(1, 4))
     story.append(info_grid([
         ("Kontoinhaber", data.get("kontoinhaber", "")),
         ("IBAN",         data.get("iban", "")),
-        ("Fälligkeit",   "Monatlich zum 01. des Monats"),
+        ("Faelligkeit",  "Monatlich zum 01. des Monats"),
     ]))
     story.append(Spacer(1, 16))
 
-    # ── Hinweise ──────────────────────────────────────────────────
     story.append(HRFlowable(width="100%", thickness=1, color=BORDER))
     story.append(Spacer(1, 8))
-    hinweise = [
+    for titel, text in [
         ("Probezeit",  "Die ersten zwei Unterrichtseinheiten gelten als unverbindliche Probestunden."),
-        ("Kündigung",  "Kündigungen sind mit einer Frist von 4 Wochen zum Monatsende schriftlich einzureichen."),
-        ("Kontakt",    "Bei Fragen: info@musikschule-hueckelhoven.de | Tel: 01234 56789"),
-    ]
-    for titel, text in hinweise:
+        ("Kuendigung", "Kuendigungen sind mit einer Frist von 4 Wochen zum Monatsende schriftlich einzureichen."),
+        ("Kontakt",    "Bei Fragen: info@musikschule-hueckelhoven.de"),
+    ]:
         story.append(Paragraph(f"<b>{titel}:</b>  {text}", body_style))
 
-    story.append(Spacer(1, 20))
-
-    # ── Unterschrift ──────────────────────────────────────────────
-    sig = Table(
-        [["____________________________", "____________________________"],
-         ["Ort, Datum", "Unterschrift Sorgeberechtigte/r"]],
-        colWidths=[8*cm, 8*cm]
-    )
-    sig.setStyle(TableStyle([
-        ("FONTNAME",  (0,1), (-1,1), "Helvetica"),
-        ("FONTSIZE",  (0,1), (-1,1), 8),
-        ("TEXTCOLOR", (0,1), (-1,1), MUTED),
-        ("TOPPADDING",(0,0), (-1,-1), 4),
-        ("ALIGN",     (0,0), (-1,-1), "CENTER"),
-    ]))
-    story.append(sig)
-
-    # ── Footer ────────────────────────────────────────────────────
     def footer(canvas, doc):
         canvas.saveState()
         canvas.setFillColor(MUTED)
         canvas.setFont("Helvetica", 7.5)
         y = 1.2*cm
         canvas.drawCentredString(A4[0]/2, y,
-            "Musikschule Hückelhoven · info@musikschule-hueckelhoven.de · www.musikschule-hueckelhoven.de")
+            "Musikschule Hueckelhoven · info@musikschule-hueckelhoven.de · www.musikschule-hueckelhoven.de")
         canvas.setStrokeColor(ACCENT)
         canvas.setLineWidth(2)
         canvas.line(2*cm, y+12, A4[0]-2*cm, y+12)
         canvas.restoreState()
 
     doc.build(story, onFirstPage=footer, onLaterPages=footer)
+    buffer.seek(0)
+    return buffer
+
+
+def make_agb():
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4,
+        leftMargin=2*cm, rightMargin=2*cm,
+        topMargin=1.5*cm, bottomMargin=2.5*cm)
+
+    title_s = s("at", fontSize=18, leading=24, textColor=TEAL_DARK, fontName="Helvetica-Bold", alignment=TA_CENTER)
+    sec_s   = s("as", fontSize=11, leading=16, textColor=ACCENT,    fontName="Helvetica-Bold", spaceBefore=12, spaceAfter=4)
+    body_s  = s("ab", fontSize=9.5,leading=15, textColor=DARK,      fontName="Helvetica", spaceAfter=4)
+
+    story = [
+        Paragraph("Allgemeine Geschaeftsbedingungen", title_s),
+        Paragraph("Musikschule Hueckelhoven e.V.", s("sub", fontSize=11, leading=14, textColor=MUTED, fontName="Helvetica", alignment=TA_CENTER)),
+        Spacer(1, 20),
+        HRFlowable(width="100%", thickness=2, color=ACCENT),
+        Spacer(1, 14),
+    ]
+
+    paragraphen = [
+        ("SS 1 - Geltungsbereich",
+         "Diese AGB gelten fuer alle Vertraege ueber Musikunterricht zwischen der Musikschule Hueckelhoven e.V. und den Kursteilnehmern."),
+        ("SS 2 - Vertragsschluss",
+         "Der Vertrag kommt durch die schriftliche oder digitale Anmeldung und Bestaetigung durch die Musikschule zustande."),
+        ("SS 3 - Leistungsumfang",
+         "Die Musikschule verpflichtet sich, den vereinbarten Unterricht regelmaessig durchzufuehren. Bei Ausfall wird ein Ersatztermin angeboten."),
+        ("SS 4 - Entgelt und Zahlung",
+         "Das monatliche Unterrichtsentgelt ist zum 01. eines jeden Monats per SEPA-Lastschrift faellig."),
+        ("SS 5 - Kuendigung",
+         "Der Vertrag kann mit einer Frist von 4 Wochen zum Monatsende schriftlich gekuendigt werden."),
+        ("SS 6 - Haftung",
+         "Die Musikschule haftet nur fuer grob fahrlaessig oder vorsaetzlich verursachte Schaeden."),
+        ("SS 7 - Datenschutz",
+         "Personenbezogene Daten werden ausschliesslich zur Vertragsabwicklung verwendet und nicht an Dritte weitergegeben."),
+    ]
+
+    for titel, text in paragraphen:
+        story.append(Paragraph(titel, sec_s))
+        story.append(Paragraph(text, body_s))
+
+    doc.build(story)
+    buffer.seek(0)
+    return buffer
+
+
+def make_widerruf():
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4,
+        leftMargin=2*cm, rightMargin=2*cm,
+        topMargin=1.5*cm, bottomMargin=2.5*cm)
+
+    title_s = s("wt", fontSize=18, leading=24, textColor=TEAL_DARK, fontName="Helvetica-Bold", alignment=TA_CENTER)
+    sec_s   = s("ws", fontSize=11, leading=16, textColor=ACCENT,    fontName="Helvetica-Bold", spaceBefore=12, spaceAfter=4)
+    body_s  = s("wb", fontSize=9.5,leading=15, textColor=DARK,      fontName="Helvetica", spaceAfter=4)
+
+    story = [
+        Paragraph("Widerrufsbelehrung", title_s),
+        Paragraph("Gemaess SS 355 BGB", s("wsub", fontSize=11, leading=14, textColor=MUTED, fontName="Helvetica", alignment=TA_CENTER)),
+        Spacer(1, 20),
+        HRFlowable(width="100%", thickness=2, color=ACCENT),
+        Spacer(1, 14),
+        Paragraph("Widerrufsrecht", sec_s),
+        Paragraph(
+            "Sie haben das Recht, binnen vierzehn Tagen ohne Angabe von Gruenden diesen Vertrag zu widerrufen. "
+            "Die Widerrufsfrist betraegt vierzehn Tage ab dem Tag des Vertragsschlusses.",
+            body_s),
+        Paragraph("Ausuebung des Widerrufsrechts", sec_s),
+        Paragraph(
+            "Um Ihr Widerrufsrecht auszuueben, muessen Sie uns (Musikschule Hueckelhoven, "
+            "info@musikschule-hueckelhoven.de) mittels einer eindeutigen Erklaerung informieren.",
+            body_s),
+        Paragraph("Folgen des Widerrufs", sec_s),
+        Paragraph(
+            "Wenn Sie diesen Vertrag widerrufen, haben wir Ihnen alle Zahlungen unverzueglich "
+            "und spaetestens binnen vierzehn Tagen zurueckzuzahlen.",
+            body_s),
+        Spacer(1, 20),
+        Paragraph("Muster-Widerrufsformular", sec_s),
+        Paragraph(
+            "An: Musikschule Hueckelhoven, info@musikschule-hueckelhoven.de\n\n"
+            "Hiermit widerrufe ich den abgeschlossenen Vertrag.\n\n"
+            "Name: ______________________________\n\n"
+            "Datum: ______________________________\n\n"
+            "Unterschrift: ______________________________",
+            body_s),
+    ]
+
+    doc.build(story)
     buffer.seek(0)
     return buffer
 
@@ -194,17 +254,28 @@ def generate_pdf():
         if not data:
             return jsonify({"error": "Keine Daten empfangen"}), 400
 
-        pdf_buffer = make_pdf(data)
+        anmeldung_buf = make_anmeldung(data)
+        agb_buf       = make_agb()
+        widerruf_buf  = make_widerruf()
+
         vorname  = data.get("vorname", "Anmeldung").replace(" ", "_")
         nachname = data.get("nachname", "").replace(" ", "_")
-        filename = f"Anmeldebestaetigung_{vorname}_{nachname}.pdf"
 
-        return send_file(
-            pdf_buffer,
-            mimetype="application/pdf",
-            as_attachment=True,
-            download_name=filename
-        )
+        return jsonify({
+            "anmeldung": {
+                "filename": f"Anmeldebestaetigung_{vorname}_{nachname}.pdf",
+                "data": base64.b64encode(anmeldung_buf.read()).decode("utf-8")
+            },
+            "agb": {
+                "filename": "AGB_Musikschule_Hueckelhoven.pdf",
+                "data": base64.b64encode(agb_buf.read()).decode("utf-8")
+            },
+            "widerruf": {
+                "filename": "Widerrufsbelehrung.pdf",
+                "data": base64.b64encode(widerruf_buf.read()).decode("utf-8")
+            }
+        })
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
