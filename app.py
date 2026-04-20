@@ -51,7 +51,7 @@ def make_anmeldung(data):
     firma_text = [
         Paragraph("<b>Musikschule Hückelhoven e.V.</b>",
                   s("f1", fontSize=16, fontName="Helvetica-Bold", textColor=DARK, leading=20)),
-        Paragraph("Kuhlertstr. 98, 52525 Heinsberg",
+        Paragraph("Wassenberger Str. 5b, 52525 Heinsberg",
                   s("f2", fontSize=9, fontName="Helvetica", textColor=MUTED, leading=13)),
         Spacer(1, 4),
         Paragraph("Homepage: www.musikschule-hueckelhoven.de",
@@ -74,7 +74,7 @@ def make_anmeldung(data):
     story.append(Spacer(1, 6))
 
     story.append(Paragraph(
-        "Musikschule Hückelhoven e.V. * Kuhlert Straße 98 * 52525 Heinsberg",
+        "Musikschule Hückelhoven e.V. * Wassenberger Str. 5b * 52525 Heinsberg",
         s("abs", fontSize=7.5, fontName="Helvetica", textColor=MUTED, leading=11)))
     story.append(Spacer(1, 6))
 
