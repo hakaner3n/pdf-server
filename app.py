@@ -216,10 +216,11 @@ Bitte bestätige kurz den Erhalt dieser E-Mail, um sicherzustellen, dass sie nic
             part = MIMEBase("application", "pdf")
             part.set_payload(data)
             encoders.encode_base64(part)
-            part.add_header("Content-Disposition", f'attachment; filename="{filename}"')
+            safe_filename = filename.encode("ascii", "ignore").decode()
+            part.add_header("Content-Disposition", f'attachment; filename="{safe_filename}"')
             msg.attach(part)
 
-    attach_pdf(anmeldung_pdf, f"Anmeldebestaetigung_{vorname}_{nachname}.pdf")
+    attach_pdf(anmeldung_pdf, f"Anmeldebestaetigung_{vorname}_{nachname}.pdf".encode("ascii", "ignore").decode())
     attach_pdf(agb_pdf,       "AGB_Musikschule_Hueckelhoven.pdf")
     attach_pdf(widerruf_pdf,  "Widerrufsbelehrung.pdf")
 
