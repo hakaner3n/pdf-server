@@ -218,7 +218,7 @@ def submit():
         }
 
         # Basis-URL des Servers
-        base_url = request.host_url.rstrip("/")
+        base_url = request.host_url.rstrip("/").replace("http://", "https://")
 
         # Make.com benachrichtigen mit PDF-URLs
         webhook_data = dict(data)
