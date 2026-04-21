@@ -19,7 +19,7 @@ BLACK = colors.black
 BORDER = colors.HexColor("#cccccc")
 LIGHT_GRAY = colors.HexColor("#f5f5f5")
 
-LOGO_URL = "https://raw.githubusercontent.com/hakaner3n/Anmeldung/main/logo.png"
+LOGO_URL = "https://raw.githubusercontent.com/hakaner3n/pdf-server/main/logo.png"
 
 def s(name, **kw):
     return ParagraphStyle(name, **kw)
@@ -28,8 +28,11 @@ def get_logo():
     try:
         tmp = "/tmp/logo_msh.png"
         urllib.request.urlretrieve(LOGO_URL, tmp)
-        return tmp
-    except:
+        if os.path.exists(tmp) and os.path.getsize(tmp) > 0:
+            return tmp
+        return None
+    except Exception as e:
+        print(f"Logo download failed: {e}")
         return None
 
 def next_sunday(from_date=None):
@@ -94,13 +97,13 @@ def make_anmeldung(data):
     logo_path = get_logo()
     logo_img  = Image(logo_path, width=2.2*cm, height=2.2*cm) if logo_path else Spacer(2.2*cm, 2.2*cm)
 
-    right_block = [
+    center_block = [
         Paragraph("Musikschule Hückelhoven e.V.", title_style),
         Spacer(1, 2),
         Paragraph("Wassenberger Str. 5b, 52525 Heinsberg", sub_style),
     ]
 
-    header_table = Table([[logo_img, right_block]], colWidths=[2.6*cm, W - 2.6*cm])
+    header_table = Table([[logo_img, center_block, Spacer(2.6*cm, 1)]], colWidths=[2.6*cm, W - 5.2*cm, 2.6*cm])
     header_table.setStyle(TableStyle([
         ("VALIGN",       (0,0), (-1,-1), "MIDDLE"),
         ("LEFTPADDING",  (0,0), (-1,-1), 0),
@@ -152,7 +155,8 @@ def make_anmeldung(data):
     addr_table = Table([[empf_block, datum_block]], colWidths=[W * 0.65, W * 0.35])
     addr_table.setStyle(TableStyle([
         ("VALIGN",       (0,0), (-1,-1), "TOP"),
-        ("LEFTPADDING",  (0,0), (-1,-1), 0),
+        ("LEFTPADDING",  (0,0), (0,0),  2.6*cm),
+        ("LEFTPADDING",  (1,0), (1,0),  0),
         ("RIGHTPADDING", (0,0), (-1,-1), 0),
         ("TOPPADDING",   (0,0), (-1,-1), 0),
         ("BOTTOMPADDING",(0,0), (-1,-1), 0),
