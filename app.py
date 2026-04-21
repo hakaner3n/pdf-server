@@ -57,15 +57,39 @@ def parse_kurs(kurs, zeitstempel=""):
     except:
         base_date = datetime.date.today()
 
-    naechster_sonntag = next_sunday(base_date)
-    sonntag_str = format_sunday(naechster_sonntag)
-    abbuchung = f"{schulgeld} - Wird per Lastschrift ab {naechster_sonntag.strftime('%m/%y')} immer zum 01. eines Monats abgebucht."
+    # Laufender Kurs: nächsten Sonntag berechnen
+    if "laufend" in kurs_lower or "grundkenntnisse" in kurs_lower:
+        naechster_sonntag = next_sunday(base_date)
+        beginn = format_sunday(naechster_sonntag)
+        abbuchung = f"{schulgeld} - Wird per Lastschrift ab {naechster_sonntag.strftime('%m/%y')} immer zum 01. eines Monats abgebucht."
+    else:
+        # Datum und Uhrzeit aus dem Kurs-String extrahieren
+        # Format: "So. 03/05/26 | 13:50-15:10 Uhr"
+        import re
+        datum_match = re.search(r'(\d{2}/\d{2}/\d{2})', kurs)
+        zeit_match  = re.search(r'(\d{2}:\d{2}[–-]\d{2}:\d{2})', kurs)
+        if datum_match and zeit_match:
+            d = datum_match.group(1)  # 03/05/26
+            z = zeit_match.group(1)   # 13:50-15:10
+            try:
+                dt = datetime.datetime.strptime(d, '%d/%m/%y')
+                wochentage = ["Montag","Dienstag","Mittwoch","Donnerstag","Freitag","Samstag","Sonntag"]
+                wochentag = wochentage[dt.weekday()]
+                months = ["Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"]
+                beginn = f"{wochentag}, {dt.day:02d}. {months[dt.month-1]} {str(dt.year)[2:]}; {z} Uhr"
+                abbuchung = f"{schulgeld} - Wird per Lastschrift ab {dt.strftime('%m/%y')} immer zum 01. eines Monats abgebucht."
+            except:
+                beginn = kurs
+                abbuchung = f"{schulgeld} - Wird per Lastschrift immer zum 01. eines Monats abgebucht."
+        else:
+            beginn = kurs
+            abbuchung = f"{schulgeld} - Wird per Lastschrift immer zum 01. eines Monats abgebucht."
 
     return {
         "fach":      "Musikunterricht - Baglama",
         "art":       "Gruppenunterricht",
         "ort":       "Kirchstr. 20, 40227 Düsseldorf",
-        "beginn":    sonntag_str,
+        "beginn":    beginn,
         "schulgeld": abbuchung,
     }
 
