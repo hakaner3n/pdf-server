@@ -66,8 +66,11 @@ def parse_kurs(kurs, zeitstempel=""):
         # Datum und Uhrzeit aus dem Kurs-String extrahieren
         # Format: "So. 03/05/26 | 13:50-15:10 Uhr"
         import re
-        datum_match = re.search(r'(\d{2}/\d{2}/\d{2})', kurs)
-        zeit_match  = re.search(r'(\d{2}:\d{2}[–-]\d{2}:\d{2})', kurs)
+        import urllib.parse
+        kurs_decoded = urllib.parse.unquote_plus(kurs)
+        datum_match = re.search(r'(\d{2}/\d{2}/\d{2})', kurs_decoded)
+        zeit_match  = re.search(r'(\d{2}:\d{2}[-\u2013]\d{2}:\d{2})', kurs_decoded)
+        kurs = kurs_decoded
         if datum_match and zeit_match:
             d = datum_match.group(1)  # 03/05/26
             z = zeit_match.group(1)   # 13:50-15:10
