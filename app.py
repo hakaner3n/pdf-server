@@ -155,14 +155,13 @@ def make_anmeldung(data):
     addr_table = Table([[empf_block, datum_block]], colWidths=[W * 0.65, W * 0.35])
     addr_table.setStyle(TableStyle([
         ("VALIGN",       (0,0), (-1,-1), "TOP"),
-        ("LEFTPADDING",  (0,0), (0,0),  2.6*cm),
-        ("LEFTPADDING",  (1,0), (1,0),  0),
+        ("LEFTPADDING",  (0,0), (-1,-1), 0),
         ("RIGHTPADDING", (0,0), (-1,-1), 0),
         ("TOPPADDING",   (0,0), (-1,-1), 0),
         ("BOTTOMPADDING",(0,0), (-1,-1), 0),
     ]))
     story.append(addr_table)
-    story.append(Spacer(1, 20))
+    story.append(Spacer(1, 36))
 
     # ── BETREFF ─────────────────────────────────────────────────────────────────
     story.append(Paragraph("Betreff: Anmeldebestätigung Saz-Unterricht", betreff_style))
