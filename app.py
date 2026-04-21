@@ -13,13 +13,11 @@ import urllib.request
 
 app = Flask(__name__)
 
-TEAL_DARK  = colors.HexColor("#144d57")
-ACCENT     = colors.HexColor("#c0392b")
-BORDER     = colors.HexColor("#ccd8da")
-WHITE      = colors.white
-DARK       = colors.HexColor("#2c2c2c")
-MUTED      = colors.HexColor("#666666")
-LIGHT_TEAL = colors.HexColor("#e8f4f6")
+DARK  = colors.HexColor("#2c2c2c")
+MUTED = colors.HexColor("#666666")
+BLACK = colors.black
+BORDER = colors.HexColor("#cccccc")
+LIGHT_GRAY = colors.HexColor("#f5f5f5")
 
 LOGO_URL = "https://raw.githubusercontent.com/hakaner3n/Anmeldung/main/logo.png"
 
@@ -28,110 +26,126 @@ def s(name, **kw):
 
 def get_logo():
     try:
-        tmp = "/tmp/logo.png"
-        if not os.path.exists(tmp):
-            urllib.request.urlretrieve(LOGO_URL, tmp)
+        tmp = "/tmp/logo_msh.png"
+        urllib.request.urlretrieve(LOGO_URL, tmp)
         return tmp
     except:
         return None
 
-def parse_kurs(kurs):
-    kurs_lower = kurs.lower()
-    schulgeld = "80€" if "80" in kurs else "68€"
+def next_sunday(from_date=None):
+    if from_date is None:
+        from_date = datetime.date.today()
+    days_ahead = 6 - from_date.weekday()
+    if days_ahead <= 0:
+        days_ahead += 7
+    return from_date + datetime.timedelta(days=days_ahead)
 
-    if "ddorf" in kurs_lower or "d'dorf" in kurs_lower or "düsseldorf" in kurs_lower:
-        ort    = "Kirchstr. 20, 40227 Düsseldorf"
-        beginn = "Sonntag, 03.05.26; 13:50 – 15:10 Uhr"
-        abbuchung = f"{schulgeld} – Wird per Lastschrift ab 05/26 immer zum 01. eines Monats abgebucht."
-    else:
-        ort    = "Wird noch bekanntgegeben"
-        beginn = "Wird noch bekanntgegeben"
-        abbuchung = f"{schulgeld} – Wird per Lastschrift immer zum 01. eines Monats abgebucht."
+def format_sunday(d):
+    months = ["Januar","Februar","März","April","Mai","Juni",
+              "Juli","August","September","Oktober","November","Dezember"]
+    return f"Sonntag, {d.day:02d}. {months[d.month-1]} {str(d.year)[2:]}; 13:50 - 15:10 Uhr"
+
+def parse_kurs(kurs, zeitstempel=""):
+    kurs_lower = kurs.lower()
+    schulgeld = "80&#8364;" if "80" in kurs else "68&#8364;"
+
+    try:
+        base_date = datetime.datetime.fromisoformat(zeitstempel[:10]).date() if zeitstempel else datetime.date.today()
+    except:
+        base_date = datetime.date.today()
+
+    naechster_sonntag = next_sunday(base_date)
+    sonntag_str = format_sunday(naechster_sonntag)
+    abbuchung = f"{schulgeld} - Wird per Lastschrift ab {naechster_sonntag.strftime('%m/%y')} immer zum 01. eines Monats abgebucht."
 
     return {
-        "fach":      "Musikunterricht – Bağlama",
+        "fach":      "Musikunterricht - Baglama",
         "art":       "Gruppenunterricht",
-        "ort":       ort,
-        "beginn":    beginn,
+        "ort":       "Kirchstr. 20, 40227 Düsseldorf",
+        "beginn":    sonntag_str,
         "schulgeld": abbuchung,
     }
 
 def make_anmeldung(data):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4,
-        leftMargin=2.2*cm, rightMargin=2.2*cm,
-        topMargin=1.8*cm, bottomMargin=3.0*cm)
+        leftMargin=2.0*cm, rightMargin=2.0*cm,
+        topMargin=1.5*cm, bottomMargin=3.0*cm)
 
-    W = A4[0] - 4.4*cm
+    W = A4[0] - 4.0*cm
 
-    name_style    = s("name",    fontSize=14, leading=18, textColor=TEAL_DARK, fontName="Helvetica-Bold")
-    addr_style    = s("addr",    fontSize=9,  leading=13, textColor=MUTED,     fontName="Helvetica")
-    contact_style = s("contact", fontSize=8.5,leading=12, textColor=MUTED,     fontName="Helvetica", alignment=TA_CENTER)
-    absender_style= s("abs",     fontSize=7,  leading=10, textColor=MUTED,     fontName="Helvetica")
-    body_style    = s("body",    fontSize=10, leading=15, textColor=DARK,      fontName="Helvetica", spaceAfter=4)
-    bold_style    = s("bold",    fontSize=10, leading=15, textColor=DARK,      fontName="Helvetica-Bold", spaceAfter=4)
-    label_style   = s("label",   fontSize=9.5,leading=14, textColor=MUTED,     fontName="Helvetica")
-    value_style   = s("value",   fontSize=9.5,leading=14, textColor=DARK,      fontName="Helvetica-Bold")
-    date_lbl      = s("dlbl",    fontSize=9,  leading=13, textColor=MUTED,     fontName="Helvetica", alignment=TA_RIGHT)
-    date_val      = s("dval",    fontSize=9.5,leading=13, textColor=DARK,      fontName="Helvetica", alignment=TA_RIGHT)
-    betreff_style = s("betreff", fontSize=11, leading=16, textColor=DARK,      fontName="Helvetica-Bold", spaceAfter=8)
+    # Styles – exakt wie in der Original-PDF
+    title_style   = s("title",   fontSize=22, leading=28, textColor=BLACK,  fontName="Helvetica-Bold", alignment=TA_CENTER)
+    sub_style     = s("sub",     fontSize=10, leading=14, textColor=MUTED,  fontName="Helvetica",      alignment=TA_CENTER)
+    contact_style = s("contact", fontSize=9,  leading=13, textColor=MUTED,  fontName="Helvetica",      alignment=TA_CENTER)
+    absender_style= s("abs",     fontSize=7,  leading=10, textColor=MUTED,  fontName="Helvetica")
+    body_style    = s("body",    fontSize=10, leading=15, textColor=BLACK,  fontName="Helvetica",      spaceAfter=4)
+    bold_style    = s("bold",    fontSize=10, leading=15, textColor=BLACK,  fontName="Helvetica-Bold", spaceAfter=4)
+    label_style   = s("label",   fontSize=10, leading=14, textColor=MUTED,  fontName="Helvetica")
+    value_style   = s("value",   fontSize=10, leading=14, textColor=BLACK,  fontName="Helvetica-Bold")
+    date_lbl      = s("dlbl",    fontSize=9,  leading=13, textColor=MUTED,  fontName="Helvetica",      alignment=TA_RIGHT)
+    date_val      = s("dval",    fontSize=10, leading=14, textColor=BLACK,  fontName="Helvetica",      alignment=TA_RIGHT)
+    betreff_style = s("betreff", fontSize=10, leading=15, textColor=BLACK,  fontName="Helvetica-Bold", spaceAfter=6)
+    small_style   = s("small",   fontSize=7,  leading=10, textColor=MUTED,  fontName="Helvetica")
 
     story = []
 
-    # ── BRIEFKOPF ──────────────────────────────────────────────────────────────
+    # ── BRIEFKOPF: Logo links, Name+Adresse zentriert ──────────────────────────
     logo_path = get_logo()
-    logo_img  = Image(logo_path, width=2.6*cm, height=2.6*cm) if logo_path else Spacer(2.6*cm, 2.6*cm)
+    logo_img  = Image(logo_path, width=2.2*cm, height=2.2*cm) if logo_path else Spacer(2.2*cm, 2.2*cm)
 
-    header_right = [
-        Paragraph("Musikschule Hückelhoven e.V.", name_style),
-        Spacer(1, 4),
-        Paragraph("Kuhlertstr. 98, 52525 Heinsberg", addr_style),
+    right_block = [
+        Paragraph("Musikschule Hückelhoven e.V.", title_style),
+        Spacer(1, 2),
+        Paragraph("Wassenberger Str. 5b, 52525 Heinsberg", sub_style),
     ]
 
-    header_table = Table([[logo_img, header_right]], colWidths=[3.0*cm, W - 3.0*cm])
+    header_table = Table([[logo_img, right_block]], colWidths=[2.6*cm, W - 2.6*cm])
     header_table.setStyle(TableStyle([
         ("VALIGN",       (0,0), (-1,-1), "MIDDLE"),
         ("LEFTPADDING",  (0,0), (-1,-1), 0),
         ("RIGHTPADDING", (0,0), (-1,-1), 0),
-        ("BOTTOMPADDING",(0,0), (-1,-1), 0),
         ("TOPPADDING",   (0,0), (-1,-1), 0),
+        ("BOTTOMPADDING",(0,0), (-1,-1), 0),
     ]))
     story.append(header_table)
-    story.append(Spacer(1, 8))
+    story.append(Spacer(1, 10))
 
     story.append(Paragraph(
-        "Homepage: www.musikschule-hueckelhoven.de &nbsp;|&nbsp; E-Mail: info@musikschule-hueckelhoven.de",
+        "Homepage: www.musikschule-hueckelhoven.de<br/>E-Mail: info@musikschule-hueckelhoven.de",
         contact_style))
-    story.append(Spacer(1, 8))
-    story.append(HRFlowable(width="100%", thickness=1.5, color=TEAL_DARK))
-    story.append(Spacer(1, 16))
+    story.append(Spacer(1, 10))
+    story.append(HRFlowable(width="100%", thickness=0.8, color=BORDER))
+    story.append(Spacer(1, 14))
 
-    # ── ABSENDER + EMPFÄNGER + DATUM ────────────────────────────────────────────
+    # ── ABSENDER-ZEILE ──────────────────────────────────────────────────────────
+    story.append(Paragraph(
+        "Musikschule Hückelhoven e.V. * Wassenberger Str. 5b * 52525 Heinsberg",
+        absender_style))
+    story.append(Spacer(1, 8))
+
+    # ── EMPFÄNGER + DATUM ───────────────────────────────────────────────────────
     vorname  = data.get("vorname", "")
     nachname = data.get("nachname", "")
     strasse  = data.get("strasse", "")
     plz      = data.get("plz", "")
     ort_emp  = data.get("ort", "")
+    zeitstempel = data.get("zeitstempel", "")
 
-    story.append(Paragraph(
-        "Musikschule Hückelhoven e.V. · Kuhlertstr. 98 · 52525 Heinsberg",
-        absender_style))
-    story.append(Spacer(1, 6))
-
-    datum_raw = data.get("zeitstempel", "")[:10] if data.get("zeitstempel") else datetime.date.today().strftime("%Y-%m-%d")
+    datum_raw = zeitstempel[:10] if zeitstempel else datetime.date.today().strftime("%Y-%m-%d")
     try:
         datum_fmt = datetime.datetime.strptime(datum_raw, "%Y-%m-%d").strftime("%d.%m.%y")
     except:
         datum_fmt = datum_raw
 
     empf_block = [
-        Paragraph(f"{vorname} {nachname}", bold_style),
+        Paragraph(f"{vorname} {nachname}", body_style),
         Paragraph(strasse, body_style),
         Paragraph(f"{plz} {ort_emp}", body_style),
     ]
     datum_block = [
         Paragraph("Datum", date_lbl),
-        Spacer(1, 3),
+        Spacer(1, 2),
         Paragraph(datum_fmt, date_val),
     ]
 
@@ -144,11 +158,11 @@ def make_anmeldung(data):
         ("BOTTOMPADDING",(0,0), (-1,-1), 0),
     ]))
     story.append(addr_table)
-    story.append(Spacer(1, 22))
+    story.append(Spacer(1, 20))
 
     # ── BETREFF ─────────────────────────────────────────────────────────────────
     story.append(Paragraph("Betreff: Anmeldebestätigung Saz-Unterricht", betreff_style))
-    story.append(Spacer(1, 6))
+    story.append(Spacer(1, 10))
 
     # ── ANREDE & TEXT ───────────────────────────────────────────────────────────
     story.append(Paragraph(f"Hallo {vorname},", body_style))
@@ -158,8 +172,8 @@ def make_anmeldung(data):
         body_style))
     story.append(Spacer(1, 20))
 
-    # ── KURSDETAILS ─────────────────────────────────────────────────────────────
-    kurs_info = parse_kurs(data.get("kurs", ""))
+    # ── KURSDETAILS TABELLE ─────────────────────────────────────────────────────
+    kurs_info = parse_kurs(data.get("kurs", ""), zeitstempel)
     rows = [
         ("Unterrichtsteilnehmer:", f"{vorname} {nachname}"),
         ("Unterrichtsfach:",       kurs_info["fach"]),
@@ -172,13 +186,11 @@ def make_anmeldung(data):
     table_data = [[Paragraph(l, label_style), Paragraph(v, value_style)] for l, v in rows]
     details = Table(table_data, colWidths=[4.8*cm, W - 4.8*cm])
     details.setStyle(TableStyle([
-        ("TOPPADDING",    (0,0), (-1,-1), 8),
-        ("BOTTOMPADDING", (0,0), (-1,-1), 8),
-        ("LEFTPADDING",   (0,0), (-1,-1), 10),
-        ("RIGHTPADDING",  (0,0), (-1,-1), 10),
-        ("ROWBACKGROUNDS",(0,0), (-1,-1), [LIGHT_TEAL, WHITE]),
-        ("LINEBELOW",     (0,0), (-1,-2), 0.5, BORDER),
-        ("BOX",           (0,0), (-1,-1), 1,   BORDER),
+        ("TOPPADDING",    (0,0), (-1,-1), 6),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 6),
+        ("LEFTPADDING",   (0,0), (-1,-1), 0),
+        ("RIGHTPADDING",  (0,0), (-1,-1), 0),
+        ("LINEBELOW",     (0,0), (-1,-1), 0.5, BORDER),
         ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
     ]))
     story.append(details)
@@ -187,21 +199,20 @@ def make_anmeldung(data):
     # ── GRUSS ───────────────────────────────────────────────────────────────────
     story.append(Paragraph("Mit freundlichen Grüßen,", body_style))
     story.append(Spacer(1, 20))
-    story.append(Paragraph("Musikschule Hückelhoven", bold_style))
+    story.append(Paragraph("Musikschule Hückelhoven", body_style))
 
     # ── FOOTER ──────────────────────────────────────────────────────────────────
     def footer(canvas, doc):
         canvas.saveState()
         canvas.setStrokeColor(BORDER)
         canvas.setLineWidth(0.8)
-        canvas.line(2.2*cm, 2.2*cm, A4[0]-2.2*cm, 2.2*cm)
-        canvas.setFont("Helvetica-Bold", 7.5)
-        canvas.setFillColor(TEAL_DARK)
-        canvas.drawString(2.2*cm, 1.8*cm, "Bankverbindung der Musikschule Hückelhoven e.V.:")
-        canvas.setFont("Helvetica", 7.5)
+        canvas.line(2.0*cm, 2.2*cm, A4[0]-2.0*cm, 2.2*cm)
+        canvas.setFont("Helvetica-Bold", 8)
         canvas.setFillColor(DARK)
-        canvas.drawRightString(A4[0]-2.2*cm, 1.8*cm, "Kreissparkasse Heinsberg")
-        canvas.drawRightString(A4[0]-2.2*cm, 1.2*cm, "IBAN: DE96 3125 1220 1401 2544 44")
+        canvas.drawString(2.0*cm, 1.8*cm, "Bankverbindung der Musikschule Hückelhoven e.V.:")
+        canvas.setFont("Helvetica", 8)
+        canvas.drawRightString(A4[0]-2.0*cm, 1.8*cm, "Kreissparkasse Heinsberg")
+        canvas.drawRightString(A4[0]-2.0*cm, 1.2*cm, "IBAN: DE96 3125 1220 1401 2544 44")
         canvas.restoreState()
 
     doc.build(story, onFirstPage=footer, onLaterPages=footer)
@@ -212,18 +223,18 @@ def make_anmeldung(data):
 def make_agb():
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4,
-        leftMargin=2.2*cm, rightMargin=2.2*cm,
+        leftMargin=2.0*cm, rightMargin=2.0*cm,
         topMargin=1.5*cm, bottomMargin=2.5*cm)
 
-    title_s = s("at", fontSize=18, leading=24, textColor=TEAL_DARK, fontName="Helvetica-Bold", alignment=TA_CENTER)
-    sec_s   = s("as", fontSize=11, leading=16, textColor=ACCENT,    fontName="Helvetica-Bold", spaceBefore=12, spaceAfter=4)
-    body_s  = s("ab", fontSize=9.5,leading=15, textColor=DARK,      fontName="Helvetica", spaceAfter=4)
+    title_s = s("at", fontSize=18, leading=24, textColor=BLACK, fontName="Helvetica-Bold", alignment=TA_CENTER)
+    sec_s   = s("as", fontSize=11, leading=16, textColor=BLACK, fontName="Helvetica-Bold", spaceBefore=12, spaceAfter=4)
+    body_s  = s("ab", fontSize=9.5,leading=15, textColor=DARK,  fontName="Helvetica", spaceAfter=4)
 
     story = [
         Paragraph("Allgemeine Geschäftsbedingungen", title_s),
         Paragraph("Musikschule Hückelhoven e.V.", s("sub", fontSize=11, leading=14, textColor=MUTED, fontName="Helvetica", alignment=TA_CENTER)),
         Spacer(1, 20),
-        HRFlowable(width="100%", thickness=2, color=ACCENT),
+        HRFlowable(width="100%", thickness=1, color=BORDER),
         Spacer(1, 14),
     ]
     paragraphen = [
@@ -247,18 +258,18 @@ def make_agb():
 def make_widerruf():
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4,
-        leftMargin=2.2*cm, rightMargin=2.2*cm,
+        leftMargin=2.0*cm, rightMargin=2.0*cm,
         topMargin=1.5*cm, bottomMargin=2.5*cm)
 
-    title_s = s("wt", fontSize=18, leading=24, textColor=TEAL_DARK, fontName="Helvetica-Bold", alignment=TA_CENTER)
-    sec_s   = s("ws", fontSize=11, leading=16, textColor=ACCENT,    fontName="Helvetica-Bold", spaceBefore=12, spaceAfter=4)
-    body_s  = s("wb", fontSize=9.5,leading=15, textColor=DARK,      fontName="Helvetica", spaceAfter=4)
+    title_s = s("wt", fontSize=18, leading=24, textColor=BLACK, fontName="Helvetica-Bold", alignment=TA_CENTER)
+    sec_s   = s("ws", fontSize=11, leading=16, textColor=BLACK, fontName="Helvetica-Bold", spaceBefore=12, spaceAfter=4)
+    body_s  = s("wb", fontSize=9.5,leading=15, textColor=DARK,  fontName="Helvetica", spaceAfter=4)
 
     story = [
         Paragraph("Widerrufsbelehrung", title_s),
         Paragraph("Gemäß § 355 BGB", s("wsub", fontSize=11, leading=14, textColor=MUTED, fontName="Helvetica", alignment=TA_CENTER)),
         Spacer(1, 20),
-        HRFlowable(width="100%", thickness=2, color=ACCENT),
+        HRFlowable(width="100%", thickness=1, color=BORDER),
         Spacer(1, 14),
         Paragraph("Widerrufsrecht", sec_s),
         Paragraph("Sie haben das Recht, binnen vierzehn Tagen ohne Angabe von Gründen diesen Vertrag zu widerrufen. Die Widerrufsfrist beträgt vierzehn Tage ab dem Tag des Vertragsschlusses.", body_s),
@@ -268,7 +279,7 @@ def make_widerruf():
         Paragraph("Wenn Sie diesen Vertrag widerrufen, haben wir Ihnen alle Zahlungen unverzüglich und spätestens binnen vierzehn Tagen zurückzuzahlen.", body_s),
         Spacer(1, 20),
         Paragraph("Muster-Widerrufsformular", sec_s),
-        Paragraph("An: Musikschule Hückelhoven, info@musikschule-hueckelhoven.de\n\nHiermit widerrufe ich den abgeschlossenen Vertrag.\n\nName: ______________________________\n\nDatum: ______________________________\n\nUnterschrift: ______________________________", body_s),
+        Paragraph("An: Musikschule Hückelhoven, info@musikschule-hueckelhoven.de<br/><br/>Hiermit widerrufe ich den abgeschlossenen Vertrag.<br/><br/>Name: ______________________________<br/><br/>Datum: ______________________________<br/><br/>Unterschrift: ______________________________", body_s),
     ]
 
     doc.build(story)
