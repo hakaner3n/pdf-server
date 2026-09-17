@@ -48,9 +48,12 @@ def format_sunday(d):
               "Juli","August","September","Oktober","November","Dezember"]
     return f"Sonntag, {d.day:02d}. {months[d.month-1]} {str(d.year)[2:]}; 13:50 - 15:10 Uhr"
 
+DEFAULT_ORT = "Kirchstr. 20, 40227 Düsseldorf"
+
 def parse_kurs(kurs, zeitstempel=""):
     kurs_lower = kurs.lower()
     schulgeld = "80&#8364;" if "80" in kurs else "68&#8364;"
+    ort = DEFAULT_ORT
 
     try:
         base_date = datetime.datetime.fromisoformat(zeitstempel[:10]).date() if zeitstempel else datetime.date.today()
@@ -64,10 +67,16 @@ def parse_kurs(kurs, zeitstempel=""):
         abbuchung = f"{schulgeld} - Wird per Lastschrift ab {naechster_sonntag.strftime('%m/%y')} immer zum 01. eines Monats abgebucht."
     else:
         # Datum und Uhrzeit aus dem Kurs-String extrahieren
-        # Format: "So. 03/05/26 | 13:50-15:10 Uhr"
+        # Format: "Standort | 03/05/26 | 13:50-15:10 | Leih | Preis | Adresse"
         import re
         import urllib.parse
         kurs_decoded = urllib.parse.unquote_plus(kurs)
+
+        # Adresse ist das letzte Segment, falls vorhanden (neues Format mit Sheet-Anbindung)
+        segmente = [p.strip() for p in kurs_decoded.split('|')]
+        if len(segmente) >= 6 and segmente[5]:
+            ort = segmente[5]
+
         datum_match = re.search(r'(\d{2}/\d{2}/\d{2})', kurs_decoded)
         zeit_match  = re.search(r'(\d{2}:\d{2}[-\u2013]\d{2}:\d{2})', kurs_decoded)
         kurs = kurs_decoded
@@ -91,7 +100,7 @@ def parse_kurs(kurs, zeitstempel=""):
     return {
         "fach":      "Musikunterricht - Baglama",
         "art":       "Gruppenunterricht",
-        "ort":       "Kirchstr. 20, 40227 Düsseldorf",
+        "ort":       ort,
         "beginn":    beginn,
         "schulgeld": abbuchung,
     }
