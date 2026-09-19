@@ -326,15 +326,14 @@ def make_widerruf():
     return buffer
 
 
-@app.route("/anmeldung-pdf", methods=["POST", "GET"])
+@app.route("/anmeldung-pdf", methods=["POST"])
 def anmeldung_pdf():
+    # POST-only: this payload carries IBAN and Geburtsdatum. A GET variant
+    # used to read these from the query string, which gets written to
+    # Railway/Make access logs on every request. Removed for that reason —
+    # the calling Make module must send the same fields as a JSON body.
     try:
-        if request.method == "POST":
-            data = request.get_json(force=True) or {}
-        else:
-            data = {k: request.args.get(k, "") for k in
-                    ["vorname","nachname","geburtsdatum","strasse","plz","ort",
-                     "telefon","email","kurs","kontoinhaber","iban","zeitstempel"]}
+        data = request.get_json(force=True) or {}
 
         pdf_buf  = make_anmeldung(data)
         vorname  = data.get("vorname", "Anmeldung").replace(" ", "_")
