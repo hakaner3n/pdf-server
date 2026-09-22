@@ -349,13 +349,17 @@ def anmeldung_pdf():
         # with a dual filename: an ASCII-only fallback for old clients, plus
         # filename*=UTF-8''<percent-encoded> for everyone else.
         ascii_fallback = filename.encode("ascii", "ignore").decode("ascii") or "Anmeldebestaetigung.pdf"
+        # ascii_fallback sits inside a quoted-string in the header below, where
+        # a literal `"` or `\` would need RFC 2616 backslash-escaping to stay
+        # valid — found by testing a name containing a quote, not assumed.
+        ascii_fallback_escaped = ascii_fallback.replace("\\", "\\\\").replace('"', '\\"')
         encoded = urllib.parse.quote(filename)
 
         return Response(
             pdf_buf.read(),
             mimetype="application/pdf",
             headers={
-                "Content-Disposition": f"attachment; filename=\"{ascii_fallback}\"; filename*=UTF-8''{encoded}"
+                "Content-Disposition": f"attachment; filename=\"{ascii_fallback_escaped}\"; filename*=UTF-8''{encoded}"
             }
         )
     except Exception as e:
