@@ -395,6 +395,30 @@ def anmeldung_pdf():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/anmeldung-pdf-data", methods=["POST"])
+def anmeldung_pdf_data():
+    # Same PDF as /anmeldung-pdf, but the filename travels as a plain JSON
+    # string instead of an HTTP header — sidesteps the ASCII-only header
+    # rule entirely, so Make can take the exact filename we build (with real
+    # umlauts/Turkish letters) and use it for the email attachment directly,
+    # instead of Make re-typing its own copy of "Anmeldebestätigung_<name>"
+    # that then has to be kept in sync by hand.
+    try:
+        data = request.get_json(force=True) or {}
+
+        pdf_buf  = make_anmeldung(data)
+        vorname  = data.get("vorname", "Anmeldung").replace(" ", "_")
+        nachname = data.get("nachname", "").replace(" ", "_")
+        filename = f"Anmeldebestätigung_{vorname}_{nachname}.pdf"
+
+        return jsonify({
+            "filename": filename,
+            "data": base64.b64encode(pdf_buf.read()).decode(),
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/generate-pdf", methods=["POST"])
 def generate_pdf():
     try:
