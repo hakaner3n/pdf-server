@@ -10,6 +10,7 @@ import datetime
 import base64
 import os
 import urllib.request
+import urllib.parse
 
 app = Flask(__name__)
 
@@ -340,10 +341,22 @@ def anmeldung_pdf():
         nachname = data.get("nachname", "").replace(" ", "_")
         filename = f"Anmeldebestaetigung_{vorname}_{nachname}.pdf"
 
+        # HTTP headers are ASCII-only. A filename with umlauts or Turkish
+        # characters (ş, ü, ö, ...) made gunicorn reject the whole response
+        # as an invalid header, which surfaced as a plain "Bad Gateway" to
+        # Make with no hint it was the filename — found via a real end-to-
+        # end test on 2026-09-22, not a hypothetical. RFC 6266 fixes this
+        # with a dual filename: an ASCII-only fallback for old clients, plus
+        # filename*=UTF-8''<percent-encoded> for everyone else.
+        ascii_fallback = filename.encode("ascii", "ignore").decode("ascii") or "Anmeldebestaetigung.pdf"
+        encoded = urllib.parse.quote(filename)
+
         return Response(
             pdf_buf.read(),
             mimetype="application/pdf",
-            headers={"Content-Disposition": f"attachment; filename={filename}"}
+            headers={
+                "Content-Disposition": f"attachment; filename=\"{ascii_fallback}\"; filename*=UTF-8''{encoded}"
+            }
         )
     except Exception as e:
         return jsonify({"error": str(e)}), 500
