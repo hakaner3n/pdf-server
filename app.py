@@ -5,6 +5,9 @@ from reportlab.lib.units import cm
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable, Image
 from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+import reportlab as _reportlab
 import io
 import datetime
 import base64
@@ -13,6 +16,15 @@ import urllib.request
 import urllib.parse
 
 app = Flask(__name__)
+
+# Helvetica (a PDF base-14 font, metrics-only) only covers WinAnsi — umlauts
+# work but Turkish letters (Ş, ş, Ğ, ğ, İ, ı) render as a blank glyph box in
+# every PDF viewer, found via a real end-to-end test with "Şükrü" on
+# 2026-09-22. Bitstream Vera covers both — and ships inside reportlab's own
+# package already, so no extra font file or license question is added here.
+_vera_dir = os.path.join(os.path.dirname(_reportlab.__file__), "fonts")
+pdfmetrics.registerFont(TTFont("Vera", os.path.join(_vera_dir, "Vera.ttf")))
+pdfmetrics.registerFont(TTFont("Vera-Bold", os.path.join(_vera_dir, "VeraBd.ttf")))
 
 DARK  = colors.HexColor("#2c2c2c")
 MUTED = colors.HexColor("#666666")
@@ -115,18 +127,18 @@ def make_anmeldung(data):
     W = A4[0] - 4.0*cm
 
     # Styles – exakt wie in der Original-PDF
-    title_style   = s("title",   fontSize=22, leading=28, textColor=BLACK,  fontName="Helvetica-Bold", alignment=TA_CENTER)
-    sub_style     = s("sub",     fontSize=10, leading=14, textColor=MUTED,  fontName="Helvetica",      alignment=TA_CENTER)
-    contact_style = s("contact", fontSize=9,  leading=13, textColor=MUTED,  fontName="Helvetica",      alignment=TA_CENTER)
-    absender_style= s("abs",     fontSize=7,  leading=10, textColor=MUTED,  fontName="Helvetica")
-    body_style    = s("body",    fontSize=10, leading=15, textColor=BLACK,  fontName="Helvetica",      spaceAfter=4)
-    bold_style    = s("bold",    fontSize=10, leading=15, textColor=BLACK,  fontName="Helvetica-Bold", spaceAfter=4)
-    label_style   = s("label",   fontSize=10, leading=14, textColor=MUTED,  fontName="Helvetica")
-    value_style   = s("value",   fontSize=10, leading=14, textColor=BLACK,  fontName="Helvetica-Bold")
-    date_lbl      = s("dlbl",    fontSize=9,  leading=13, textColor=MUTED,  fontName="Helvetica",      alignment=TA_RIGHT)
-    date_val      = s("dval",    fontSize=10, leading=14, textColor=BLACK,  fontName="Helvetica",      alignment=TA_RIGHT)
-    betreff_style = s("betreff", fontSize=10, leading=15, textColor=BLACK,  fontName="Helvetica-Bold", spaceAfter=6)
-    small_style   = s("small",   fontSize=7,  leading=10, textColor=MUTED,  fontName="Helvetica")
+    title_style   = s("title",   fontSize=22, leading=28, textColor=BLACK,  fontName="Vera-Bold", alignment=TA_CENTER)
+    sub_style     = s("sub",     fontSize=10, leading=14, textColor=MUTED,  fontName="Vera",      alignment=TA_CENTER)
+    contact_style = s("contact", fontSize=9,  leading=13, textColor=MUTED,  fontName="Vera",      alignment=TA_CENTER)
+    absender_style= s("abs",     fontSize=7,  leading=10, textColor=MUTED,  fontName="Vera")
+    body_style    = s("body",    fontSize=10, leading=15, textColor=BLACK,  fontName="Vera",      spaceAfter=4)
+    bold_style    = s("bold",    fontSize=10, leading=15, textColor=BLACK,  fontName="Vera-Bold", spaceAfter=4)
+    label_style   = s("label",   fontSize=10, leading=14, textColor=MUTED,  fontName="Vera")
+    value_style   = s("value",   fontSize=10, leading=14, textColor=BLACK,  fontName="Vera-Bold")
+    date_lbl      = s("dlbl",    fontSize=9,  leading=13, textColor=MUTED,  fontName="Vera",      alignment=TA_RIGHT)
+    date_val      = s("dval",    fontSize=10, leading=14, textColor=BLACK,  fontName="Vera",      alignment=TA_RIGHT)
+    betreff_style = s("betreff", fontSize=10, leading=15, textColor=BLACK,  fontName="Vera-Bold", spaceAfter=6)
+    small_style   = s("small",   fontSize=7,  leading=10, textColor=MUTED,  fontName="Vera")
 
     story = []
 
@@ -247,10 +259,10 @@ def make_anmeldung(data):
         canvas.setStrokeColor(BORDER)
         canvas.setLineWidth(0.8)
         canvas.line(2.0*cm, 2.2*cm, A4[0]-2.0*cm, 2.2*cm)
-        canvas.setFont("Helvetica-Bold", 8)
+        canvas.setFont("Vera-Bold", 8)
         canvas.setFillColor(DARK)
         canvas.drawString(2.0*cm, 1.8*cm, "Bankverbindung der Musikschule Hückelhoven e.V.:")
-        canvas.setFont("Helvetica", 8)
+        canvas.setFont("Vera", 8)
         canvas.drawRightString(A4[0]-2.0*cm, 1.8*cm, "Kreissparkasse Heinsberg")
         canvas.drawRightString(A4[0]-2.0*cm, 1.2*cm, "IBAN: DE96 3125 1220 1401 2544 44")
         canvas.restoreState()
@@ -266,13 +278,13 @@ def make_agb():
         leftMargin=2.0*cm, rightMargin=2.0*cm,
         topMargin=1.5*cm, bottomMargin=2.5*cm)
 
-    title_s = s("at", fontSize=18, leading=24, textColor=BLACK, fontName="Helvetica-Bold", alignment=TA_CENTER)
-    sec_s   = s("as", fontSize=11, leading=16, textColor=BLACK, fontName="Helvetica-Bold", spaceBefore=12, spaceAfter=4)
-    body_s  = s("ab", fontSize=9.5,leading=15, textColor=DARK,  fontName="Helvetica", spaceAfter=4)
+    title_s = s("at", fontSize=18, leading=24, textColor=BLACK, fontName="Vera-Bold", alignment=TA_CENTER)
+    sec_s   = s("as", fontSize=11, leading=16, textColor=BLACK, fontName="Vera-Bold", spaceBefore=12, spaceAfter=4)
+    body_s  = s("ab", fontSize=9.5,leading=15, textColor=DARK,  fontName="Vera", spaceAfter=4)
 
     story = [
         Paragraph("Allgemeine Geschäftsbedingungen", title_s),
-        Paragraph("Musikschule Hückelhoven e.V.", s("sub", fontSize=11, leading=14, textColor=MUTED, fontName="Helvetica", alignment=TA_CENTER)),
+        Paragraph("Musikschule Hückelhoven e.V.", s("sub", fontSize=11, leading=14, textColor=MUTED, fontName="Vera", alignment=TA_CENTER)),
         Spacer(1, 20),
         HRFlowable(width="100%", thickness=1, color=BORDER),
         Spacer(1, 14),
@@ -301,13 +313,13 @@ def make_widerruf():
         leftMargin=2.0*cm, rightMargin=2.0*cm,
         topMargin=1.5*cm, bottomMargin=2.5*cm)
 
-    title_s = s("wt", fontSize=18, leading=24, textColor=BLACK, fontName="Helvetica-Bold", alignment=TA_CENTER)
-    sec_s   = s("ws", fontSize=11, leading=16, textColor=BLACK, fontName="Helvetica-Bold", spaceBefore=12, spaceAfter=4)
-    body_s  = s("wb", fontSize=9.5,leading=15, textColor=DARK,  fontName="Helvetica", spaceAfter=4)
+    title_s = s("wt", fontSize=18, leading=24, textColor=BLACK, fontName="Vera-Bold", alignment=TA_CENTER)
+    sec_s   = s("ws", fontSize=11, leading=16, textColor=BLACK, fontName="Vera-Bold", spaceBefore=12, spaceAfter=4)
+    body_s  = s("wb", fontSize=9.5,leading=15, textColor=DARK,  fontName="Vera", spaceAfter=4)
 
     story = [
         Paragraph("Widerrufsbelehrung", title_s),
-        Paragraph("Gemäß § 355 BGB", s("wsub", fontSize=11, leading=14, textColor=MUTED, fontName="Helvetica", alignment=TA_CENTER)),
+        Paragraph("Gemäß § 355 BGB", s("wsub", fontSize=11, leading=14, textColor=MUTED, fontName="Vera", alignment=TA_CENTER)),
         Spacer(1, 20),
         HRFlowable(width="100%", thickness=1, color=BORDER),
         Spacer(1, 14),
