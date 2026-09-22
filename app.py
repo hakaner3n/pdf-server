@@ -63,6 +63,23 @@ def format_sunday(d):
 
 DEFAULT_ORT = "Kirchstr. 20, 40227 Düsseldorf"
 
+# For the ASCII-only Content-Disposition fallback (see anmeldung_pdf below):
+# dropping unmappable characters outright turned "Öztürk-Müller" into
+# "ztrk-Mller" — technically valid but ugly, and standard German practice is
+# to transliterate umlauts instead. Turkish letters get a plain nearest-ASCII
+# approximation since there's no equivalent digraph convention for them.
+# The real, correctly-accented name still goes out via filename*=UTF-8'' —
+# this table only shapes the fallback that legacy clients see.
+ASCII_FALLBACK_MAP = {
+    "ä": "ae", "ö": "oe", "ü": "ue", "Ä": "Ae", "Ö": "Oe", "Ü": "Ue", "ß": "ss",
+    "ş": "s", "Ş": "S", "ğ": "g", "Ğ": "G", "ı": "i", "İ": "I", "ç": "c", "Ç": "C",
+}
+
+def ascii_fallback_name(text):
+    for src, dst in ASCII_FALLBACK_MAP.items():
+        text = text.replace(src, dst)
+    return text.encode("ascii", "ignore").decode("ascii")
+
 def parse_kurs(kurs, zeitstempel=""):
     kurs_lower = kurs.lower()
     schulgeld = "80&#8364;" if "80" in kurs else "68&#8364;"
@@ -360,7 +377,7 @@ def anmeldung_pdf():
         # end test on 2026-09-22, not a hypothetical. RFC 6266 fixes this
         # with a dual filename: an ASCII-only fallback for old clients, plus
         # filename*=UTF-8''<percent-encoded> for everyone else.
-        ascii_fallback = filename.encode("ascii", "ignore").decode("ascii") or "Anmeldebestaetigung.pdf"
+        ascii_fallback = ascii_fallback_name(filename) or "Anmeldebestaetigung.pdf"
         # ascii_fallback sits inside a quoted-string in the header below, where
         # a literal `"` or `\` would need RFC 2616 backslash-escaping to stay
         # valid — found by testing a name containing a quote, not assumed.
