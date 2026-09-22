@@ -368,7 +368,7 @@ def anmeldung_pdf():
         pdf_buf  = make_anmeldung(data)
         vorname  = data.get("vorname", "Anmeldung").replace(" ", "_")
         nachname = data.get("nachname", "").replace(" ", "_")
-        filename = f"Anmeldebestaetigung_{vorname}_{nachname}.pdf"
+        filename = f"Anmeldebestätigung_{vorname}_{nachname}.pdf"
 
         # HTTP headers are ASCII-only. A filename with umlauts or Turkish
         # characters (ş, ü, ö, ...) made gunicorn reject the whole response
